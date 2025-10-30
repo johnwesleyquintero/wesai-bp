@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WesAI Builder Platform</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><polygon points=%2250,10 90,90 10,90%22 fill=%22purple%22/></svg>">
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    // For Tailwind dark mode based on class
+    // Check local storage for theme preference
+    const theme = localStorage.getItem('theme');
+    if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
+    // API_KEY handling:
+    // Vite exposes environment variables prefixed with VITE_ to the client code via import.meta.env.
+    // For local development, create a .env file in the root of your project and add:
+    // VITE_GEMINI_API_KEY=YOUR_ACTUAL_GEMINI_API_KEY
+    // IMPORTANT: Do not commit your .env file or real API keys to version control.
+    // The application will prioritize keys saved in LocalStorage via the UI.
+  </script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    }
+
+    /* Custom dark mode overrides for prose in model chat bubbles */
+    .dark .prose-invert code {
+      background-color: #1e293b; /* slate-800 */
+      color: #e2e8f0; /* slate-200 */
+    }
+    .dark .prose-invert pre {
+      background-color: #1e293b; /* slate-800 */
+      color: #e2e8f0; /* slate-200 */
+    }
+
+    /* Styles for Tailwind Typography within user chat bubble (blue background) */
+    .prose-invert-user-bubble {
+      --tw-prose-body: #e0f2fe;
+      --tw-prose-headings: #ffffff;
+      --tw-prose-lead: #bae6fd;
+      --tw-prose-links: #ffffff;
+      --tw-prose-bold: #ffffff;
+      --tw-prose-counters: #bae6fd;
+      --tw-prose-bullets: #bae6fd;
+      --tw-prose-hr: #38bdf8;
+      --tw-prose-quotes: #f0f9ff;
+      --tw-prose-quote-borders: #7dd3fc;
+      --tw-prose-captions: #bae6fd;
+      --tw-prose-code: #ffffff;
+      --tw-prose-pre-code: #e0f2fe;
+      --tw-prose-pre-bg: rgba(30, 64, 175, 0.3);
+      --tw-prose-th-borders: #7dd3fc;
+      --tw-prose-td-borders: #38bdf8;
+      --tw-prose-invert-body: #e0f2fe;
+      --tw-prose-invert-headings: #ffffff;
+      --tw-prose-invert-lead: #bae6fd;
+      --tw-prose-invert-links: #ffffff;
+      --tw-prose-invert-bold: #ffffff;
+      --tw-prose-invert-counters: #bae6fd;
+      --tw-prose-invert-bullets: #bae6fd;
+      --tw-prose-invert-hr: #38bdf8;
+      --tw-prose-invert-quotes: #f0f9ff;
+      --tw-prose-invert-quote-borders: #7dd3fc;
+      --tw-prose-invert-captions: #bae6fd;
+      --tw-prose-invert-code: #ffffff;
+      --tw-prose-invert-pre-code: #e0f2fe;
+      --tw-prose-invert-pre-bg: rgba(30, 64, 175, 0.3);
+      --tw-prose-invert-th-borders: #7dd3fc;
+      --tw-prose-invert-td-borders: #38bdf8;
+    }
+    .prose-invert-user-bubble code::before, .prose-invert-user-bubble code::after {
+        content: ""; /* Remove backticks from inline code */
+    }
+
+    /* Ensure custom PreWithCopyButton code text is themed correctly */
+    .dark .prose-pre code {
+       color: inherit; /* Inherit from pre */
+    }
+  </style>
+  <!-- Babel for ReactPreviewRenderer -->
+  <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+  
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.3.0",
+    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
+    "remark-gfm": "https://esm.sh/remark-gfm@^4.0.1",
+    "vite": "https://esm.sh/vite@^6.3.5",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^4.5.1",
+    "@codemirror/state": "https://esm.sh/@codemirror/state@6.4.1",
+    "@codemirror/view": "https://esm.sh/@codemirror/view@6.28.0",
+    "@codemirror/commands": "https://esm.sh/@codemirror/commands@6.6.0",
+    "@codemirror/lang-javascript": "https://esm.sh/@codemirror/lang-javascript@6.2.2",
+    "@codemirror/theme-one-dark": "https://esm.sh/@codemirror/theme-one-dark@6.1.2",
+    "@codemirror/language": "https://esm.sh/@codemirror/language@6.10.2",
+    "@codemirror/autocomplete": "https://esm.sh/@codemirror/autocomplete@6.16.0",
+    "@codemirror/lint": "https://esm.sh/@codemirror/lint@6.8.0",
+    "@codemirror/search": "https://esm.sh/@codemirror/search@6.5.6"
+  }
+}
+</script>
+</head>
+<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

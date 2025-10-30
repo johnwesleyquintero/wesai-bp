@@ -1,0 +1,6 @@
+{
+  "name": "WesAI Builder Platform",
+  "description": "An AI-powered platform that uses the Gemini API to assist in building and creating software, content, and images. It features tools for code review, refactoring, generation, interactive chat, and more, with a focus on TypeScript and React.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
