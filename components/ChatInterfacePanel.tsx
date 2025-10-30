@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,8 +10,9 @@ interface ChatInterfacePanelProps {
   chatMessages: ChatMessage[];
   chatInput: string;
   onChatInputChange: (value: string) => void;
-  onClearChatInput: () => void; // New prop for clearing chat input
+  onClearChatInput: () => void;
   onChatSubmit: () => void;
+  onClearChat: () => void;
   isLoading: boolean;
   isApiKeyConfigured: boolean;
   isChatSessionActive: boolean;
@@ -20,12 +22,20 @@ interface ChatInterfacePanelProps {
   error: string | null; 
 }
 
+const ClearChatIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001a4.992 4.992 0 0 1-4.992 4.992h-.304m-1.254-9.348h1.254a4.992 4.992 0 0 0-4.992-4.992v.001a4.992 4.992 0 0 0-4.992 4.992h1.254M12 15.348h-1.254a4.992 4.992 0 0 0-4.992-4.992v-.001a4.992 4.992 0 0 0-4.992 4.992h-1.254M12 15.348v-1.802a4.992 4.992 0 0 1-4.992-4.992v.001a4.992 4.992 0 0 1 4.992-4.992h.304m-1.254 9.348h-1.254a4.992 4.992 0 0 1 4.992 4.992v.001a4.992 4.992 0 0 1 4.992-4.992h-1.254" />
+  </svg>
+);
+
+
 export const ChatInterfacePanel: React.FC<ChatInterfacePanelProps> = ({
   chatMessages,
   chatInput,
   onChatInputChange,
   onClearChatInput,
   onChatSubmit,
+  onClearChat,
   isLoading,
   isApiKeyConfigured,
   isChatSessionActive,
@@ -63,6 +73,18 @@ export const ChatInterfacePanel: React.FC<ChatInterfacePanelProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+      <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-white dark:bg-gray-800/50">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Chat with WesAI</h2>
+          <button 
+            onClick={onClearChat}
+            title="Clear chat history"
+            disabled={isLoading || chatMessages.length === 0}
+            className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+              <ClearChatIcon />
+          </button>
+      </div>
+
        {error && (
         <div className="p-3 border-b border-red-300 dark:border-red-600 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-sm">
           <strong>Chat Error:</strong> {error}

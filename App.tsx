@@ -1,81 +1,70 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
-import { Header } from './components/Header.tsx';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { 
   initializeGeminiClient, 
   clearGeminiClient,
-  performCodeToolActionStream,
-  sendChatMessageStream,
-  initializeChat,
-  generateImageWithImagen,
+  generateWebAppWithGeminiStream,
+  editCodeWithGeminiStream
 } from './services/geminiService.ts';
 
-// Import NEW/MODIFIED Components
-import { Sidebar } from './components/Sidebar.tsx';
-import { SettingsModal } from './components/SettingsModal.tsx';
+// Import Components
+import { Header } from './components/Header.tsx';
 import { Toast } from './components/Toast.tsx';
-
-// Import Panel Components
-import { BuilderPanel } from './components/BuilderPanel.tsx';
-import { DocumentationViewerPanel } from './components/DocumentationViewerPanel.tsx';
-import { ChatInterfacePanel } from './components/ChatInterfacePanel.tsx';
-import { CodeInteractionPanel } from './components/CodeInteractionPanel.tsx';
-import { ImageGenerationPanel } from './components/ImageGenerationPanel.tsx';
+import { LoadingScreen } from './components/LoadingScreen.tsx';
+import { BuilderEmptyState } from './components/BuilderEmptyState.tsx';
+import { CodeEditor } from './components/CodeEditor.tsx';
+import { LivePreview } from './components/LivePreview.tsx';
+import { LoadingSpinner } from './components/LoadingSpinner.tsx';
 
 // Import shared types
-import { ApiKeySource, Theme, ActiveTab, ChatMessage, CodeTool } from './types.ts';
-import { Chat } from '@google/genai';
+import { Theme, CopilotMessage } from './types.ts';
 
 
 const App: React.FC = () => {
   // --- Global State ---
+  const [isInitializing, setIsInitializing] = useState(true);
   const [activeApiKey, setActiveApiKey] = useState<string | null>(null);
-  const [apiKeySource, setApiKeySource] = useState<ApiKeySource>('none');
   const [theme, setTheme] = useState<Theme>(() => {
     const storedTheme = localStorage.getItem('theme') as Theme | null;
     if (storedTheme) return storedTheme;
     return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ? 'dark' : 'light';
   });
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // --- Tab Navigation State ---
-  const [activeTab, setActiveTab] = useState<ActiveTab>('builder');
-
-  // --- Panel-specific State ---
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Chat Panel State
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatSession, setChatSession] = useState<Chat | null>(null);
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  // --- Builder State ---
+  const [prompt, setPrompt] = useState<string>('');
+  const [generatedCode, setGeneratedCode] = useState<string>('');
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
+  const [copilotInput, setCopilotInput] = useState<string>('');
 
-  // Code Tools Panel State
-  const [activeCodeTool, setActiveCodeTool] = useState<CodeTool>('review');
-  const [codeToolInput, setCodeToolInput] = useState('');
-  const [codeToolFeedback, setCodeToolFeedback] = useState('');
+  // --- Resizable Panel State ---
+  const [dividerPosition, setDividerPosition] = useState<number>(() => {
+      const savedPosition = localStorage.getItem('builderDividerPosition');
+      return savedPosition ? parseInt(savedPosition, 10) : window.innerWidth / 2;
+  });
+  const isDragging = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Image Panel State
-  const [imagePrompt, setImagePrompt] = useState('');
-  const [generatedImageData, setGeneratedImageData] = useState<string | null>(null);
 
-  // Fix: Hoist `isApiKeyConfigured` to be available for useEffect hooks.
+  // --- Derived State ---
   const isApiKeyConfigured = !!activeApiKey;
 
-
   // --- Effects ---
+
+  // App Initialization Effect
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    setTimeout(() => { setIsInitializing(false); }, 500);
+  }, []);
+
+  // Theme Management Effect
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // API Key Initialization Effect
   const initializeActiveApiKey = useCallback(() => {
     const storedKey = localStorage.getItem('geminiApiKey');
     const envApiKey = process.env.API_KEY;
@@ -83,35 +72,19 @@ const App: React.FC = () => {
     if (storedKey) {
       setActiveApiKey(storedKey);
       initializeGeminiClient(storedKey);
-      setApiKeySource('ui');
     } else if (envApiKey && envApiKey.trim() !== '') {
       setActiveApiKey(envApiKey);
       initializeGeminiClient(envApiKey);
-      setApiKeySource('env');
     } else {
       clearGeminiClient();
       setActiveApiKey(null);
-      setApiKeySource('none');
-      setIsSettingsModalOpen(true); // Open settings if no key is found
+      setError("Gemini API key not found. Please set it as an environment variable (VITE_GEMINI_API_KEY) or in localStorage ('geminiApiKey') to use this application.");
     }
   }, []); 
 
   useEffect(() => {
     initializeActiveApiKey();
   }, [initializeActiveApiKey]);
-
-  // Initialize chat session when chat tab is active and API key is set
-  useEffect(() => {
-    if (activeTab === 'chat' && isApiKeyConfigured && !chatSession) {
-      try {
-        const newChat = initializeChat();
-        setChatSession(newChat);
-      } catch (e) {
-        setError("Could not initialize chat session. Check your API key.");
-        console.error(e);
-      }
-    }
-  }, [activeTab, isApiKeyConfigured, chatSession]);
   
   // --- Handlers ---
   const showToast = (message: string) => {
@@ -122,205 +95,216 @@ const App: React.FC = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   }, []);
 
-  const toggleSidebar = useCallback(() => {
-    setIsSidebarCollapsed(prev => !prev);
+  // --- Builder Handlers ---
+  const handleGenerate = useCallback(async (promptToBuild: string) => {
+      if (!promptToBuild.trim()) {
+          setError("Please enter a prompt to describe the application you want to build.");
+          return;
+      }
+      if (!isApiKeyConfigured) {
+          setError("API Key is not configured. Cannot generate code.");
+          return;
+      }
+
+      setIsLoading(true);
+      setLoadingMessage('Building initial component...');
+      setError(null);
+      setGeneratedCode('');
+
+      try {
+          const stream = await generateWebAppWithGeminiStream(promptToBuild);
+          let fullCode = '';
+          for await (const chunk of stream) {
+              const chunkText = chunk.text;
+              if (chunkText) {
+                  fullCode += chunkText;
+                  setGeneratedCode(fullCode);
+              }
+          }
+      } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
+          setError(`Error during generation: ${errorMessage}`);
+          console.error("Generation error:", err);
+      } finally {
+          setIsLoading(false);
+      }
+  }, [isApiKeyConfigured]);
+
+  const handleCopilotSubmit = useCallback(async () => {
+      if (!copilotInput.trim() || !generatedCode) return;
+      
+      const currentInput = copilotInput;
+      setCopilotInput('');
+      
+      setIsLoading(true);
+      setLoadingMessage('Copilot is editing the code...');
+      setError(null);
+
+      try {
+          const stream = await editCodeWithGeminiStream(generatedCode, currentInput);
+          let fullCode = '';
+          let firstChunk = true;
+          for await (const chunk of stream) {
+              const chunkText = chunk.text;
+              if (chunkText) {
+                  if (firstChunk) {
+                      fullCode += chunkText.trimStart();
+                      firstChunk = false;
+                  } else {
+                      fullCode += chunkText;
+                  }
+                  setGeneratedCode(fullCode);
+              }
+          }
+          showToast(`Applied edit: "${currentInput}"`);
+      } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : "An unknown error occurred during edit.";
+          setError(errorMessage);
+      } finally {
+          setIsLoading(false);
+      }
+  }, [copilotInput, generatedCode]);
+
+  const handleDownload = useCallback(() => {
+      if (!generatedCode) return;
+      const blob = new Blob([generatedCode], { type: 'text/jsx;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'PreviewComponent.tsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+  }, [generatedCode]);
+
+  const handleCopy = useCallback(() => {
+      if (!generatedCode) return;
+      navigator.clipboard.writeText(generatedCode)
+          .then(() => showToast("Code copied to clipboard!"))
+          .catch(err => {
+              console.error('Failed to copy code: ', err);
+              setError("Failed to copy code to clipboard.");
+      });
+  }, [generatedCode, showToast]);
+
+  const handleNew = useCallback(() => {
+    setGeneratedCode('');
+    setPrompt('');
+    setCopilotInput('');
+    setError(null);
   }, []);
 
-  const handleSaveApiKey = useCallback((key: string) => {
-    if (key.trim()) {
-      localStorage.setItem('geminiApiKey', key);
-      setActiveApiKey(key);
-      initializeGeminiClient(key);
-      setApiKeySource('ui');
-      setIsSettingsModalOpen(false); // Close modal on save
-    }
-  }, []);
-
-  const handleRemoveApiKey = useCallback(() => {
-    localStorage.removeItem('geminiApiKey');
-    initializeActiveApiKey(); 
-  }, [initializeActiveApiKey]);
-  
-  const handleTabChange = (tab: ActiveTab) => {
-    setError(null); // Clear errors when switching tabs
-    setActiveTab(tab);
+  // --- Resizable Panel Logic ---
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+      isDragging.current = true;
+      e.preventDefault();
   };
 
-  // --- Panel Logic Handlers ---
+  const onMouseUp = useCallback(() => {
+      isDragging.current = false;
+      localStorage.setItem('builderDividerPosition', dividerPosition.toString());
+  }, [dividerPosition]);
 
-  // Chat Panel Handlers
-  const handleChatSubmit = useCallback(async () => {
-    if (!chatInput.trim() || !chatSession) return;
-    
-    const userMessage: ChatMessage = { id: `user-${Date.now()}`, role: 'user', content: chatInput };
-    setChatMessages(prev => [...prev, userMessage]);
-    const currentInput = chatInput;
-    setChatInput('');
-    setIsLoading(true);
-    setError(null);
-    
-    const modelMessageId = `model-${Date.now()}`;
-    setChatMessages(prev => [...prev, { id: modelMessageId, role: 'model', content: '' }]);
+  const onMouseMove = useCallback((e: MouseEvent) => {
+      if (!isDragging.current || !containerRef.current) return;
+      
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const newWidth = e.clientX - containerRect.left;
+      const minWidth = 250; // Minimum width for each panel
+      const maxWidth = containerRect.width - minWidth;
 
-    try {
-        const stream = await sendChatMessageStream(chatSession, currentInput);
-        let fullResponse = '';
-        for await (const chunk of stream) {
-            const chunkText = chunk.text;
-            if (chunkText) {
-                fullResponse += chunkText;
-                setChatMessages(prev => prev.map(msg => 
-                    msg.id === modelMessageId ? { ...msg, content: fullResponse } : msg
-                ));
-            }
-        }
-    } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
-        setError(errorMessage);
-        setChatMessages(prev => prev.filter(msg => msg.id !== modelMessageId));
-    } finally {
-        setIsLoading(false);
-    }
-  }, [chatInput, chatSession]);
-
-  const handleCopyChatMessage = useCallback((content: string, messageId: string) => {
-    navigator.clipboard.writeText(content).then(() => {
-        setCopiedMessageId(messageId);
-        showToast("Copied to clipboard!");
-        setTimeout(() => setCopiedMessageId(null), 2000);
-    }).catch(err => console.error('Failed to copy chat message: ', err));
+      if (newWidth > minWidth && newWidth < maxWidth) {
+          setDividerPosition(newWidth);
+      }
   }, []);
 
-  // Code Tools Handlers
-  const handleCodeToolSubmit = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    setCodeToolFeedback('');
-    try {
-      const stream = await performCodeToolActionStream(codeToolInput, activeCodeTool);
-      let fullFeedback = '';
-      for await (const chunk of stream) {
-        const chunkText = chunk.text;
-        if(chunkText) {
-          fullFeedback += chunkText;
-          setCodeToolFeedback(fullFeedback);
-        }
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [codeToolInput, activeCodeTool]);
+  useEffect(() => {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
 
-  // Image Generation Handlers
-  const handleImageSubmit = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    setGeneratedImageData(null);
-    try {
-      const response = await generateImageWithImagen(imagePrompt);
-      const base64ImageBytes = response.generatedImages[0].image.imageBytes;
-      setGeneratedImageData(base64ImageBytes);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [imagePrompt]);
+      return () => {
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+      };
+  }, [onMouseMove, onMouseUp]);
 
-  const renderActivePanel = () => {
-    switch (activeTab) {
-        case 'builder':
-            return <BuilderPanel isApiKeyConfigured={isApiKeyConfigured} theme={theme} showToast={showToast} />;
-        case 'chat':
-            return <ChatInterfacePanel 
-                      chatMessages={chatMessages}
-                      chatInput={chatInput}
-                      onChatInputChange={setChatInput}
-                      onClearChatInput={() => setChatInput('')}
-                      onChatSubmit={handleChatSubmit}
-                      isLoading={isLoading}
-                      isApiKeyConfigured={isApiKeyConfigured}
-                      isChatSessionActive={!!chatSession}
-                      onCopyChatMessage={handleCopyChatMessage}
-                      onTogglePreview={(messageId) => { /* Logic for preview toggle */ }}
-                      copiedMessageId={copiedMessageId}
-                      error={error}
-                    />;
-        case 'codeTools':
-            return <CodeInteractionPanel 
-                      activeTool={activeCodeTool}
-                      onToolChange={setActiveCodeTool}
-                      code={codeToolInput}
-                      onCodeChange={(e) => setCodeToolInput(e.target.value)}
-                      onClearInput={() => setCodeToolInput('')}
-                      onSubmit={handleCodeToolSubmit}
-                      isLoading={isLoading}
-                      isApiKeyConfigured={isApiKeyConfigured}
-                      feedback={codeToolFeedback}
-                      onClearFeedback={() => setCodeToolFeedback('')}
-                      error={error}
-                      setError={setError}
-                    />;
-        case 'image':
-            return <ImageGenerationPanel
-                      prompt={imagePrompt}
-                      onPromptChange={(e) => setImagePrompt(e.target.value)}
-                      onClearPrompt={() => setImagePrompt('')}
-                      onSubmit={handleImageSubmit}
-                      onClearImage={() => setGeneratedImageData(null)}
-                      isLoading={isLoading}
-                      isApiKeyConfigured={isApiKeyConfigured}
-                      imageData={generatedImageData}
-                      error={error}
-                      setError={setError}
-                    />;
-        case 'documentation':
-            return <DocumentationViewerPanel />;
-        default:
-            return <BuilderPanel isApiKeyConfigured={isApiKeyConfigured} theme={theme} showToast={showToast}/>;
-    }
+  // --- Render Logic ---
+  if (isInitializing) {
+    return <LoadingScreen />;
   }
 
-
   return (
-    <div className="h-screen w-screen flex flex-col bg-gray-100 dark:bg-gray-900 overflow-hidden">
-        <Header title="WesAI Builder Platform" />
-        
-        <div className="flex flex-1 min-h-0">
-            <Sidebar 
-                activeTab={activeTab} 
-                onTabChange={handleTabChange} 
-                onOpenSettings={() => setIsSettingsModalOpen(true)}
-                theme={theme}
-                toggleTheme={toggleTheme}
-                isCollapsed={isSidebarCollapsed}
-                onToggle={toggleSidebar}
-            />
-
-            <div className="flex-1 flex flex-col overflow-hidden">
-                <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
-                    {renderActivePanel()}
-                </main>
-                <footer className="text-center py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                        WesAI Builder Platform - Powered by Google Gemini.
-                    </p>
-                </footer>
-            </div>
-        </div>
-
-        <SettingsModal
-            isOpen={isSettingsModalOpen}
-            onClose={() => setIsSettingsModalOpen(false)}
-            onSaveKey={handleSaveApiKey}
-            onRemoveKey={handleRemoveApiKey}
-            isKeySet={isApiKeyConfigured}
-            currentKeySource={apiKeySource}
+    <div className="h-screen w-screen flex flex-col bg-gray-50 dark:bg-black text-gray-900 dark:text-gray-100 font-sans">
+        <Header 
+          isCodeGenerated={!!generatedCode}
+          onNew={handleNew}
+          onCopy={handleCopy}
+          onDownload={handleDownload}
+          copilotInput={copilotInput}
+          onCopilotInputChange={setCopilotInput}
+          onCopilotSubmit={handleCopilotSubmit}
+          isLoading={isLoading}
+          theme={theme}
+          toggleTheme={toggleTheme}
         />
+        
+        <main className="flex-1 flex flex-col min-h-0 relative">
+           {error && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl p-4 z-20">
+                    <div className="p-3 bg-red-100 dark:bg-red-900/80 backdrop-blur-sm border border-red-400 text-red-700 dark:text-red-200 rounded-md text-sm shadow-lg" role="alert">
+                        <strong className="font-semibold">Error:</strong> {error}
+                    </div>
+                </div>
+            )}
+            
+            {!generatedCode ? (
+              <BuilderEmptyState 
+                onTemplateClick={(p) => { setPrompt(p); handleGenerate(p); }}
+                prompt={prompt}
+                setPrompt={setPrompt}
+                handleGenerate={handleGenerate}
+                isLoading={isLoading}
+                isApiKeyConfigured={isApiKeyConfigured}
+              />
+            ) : (
+              <div ref={containerRef} className="flex flex-row flex-grow min-h-0 p-2 sm:p-4 gap-4">
+                  {/* Left Pane: Code Editor */}
+                  <div style={{ width: `${dividerPosition}px` }} className="flex flex-col min-h-0">
+                      <div className="flex-grow h-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+                         <CodeEditor code={generatedCode} onCodeChange={setGeneratedCode} theme={theme} />
+                      </div>
+                  </div>
+                   {/* Divider */}
+                  <div
+                    onMouseDown={onMouseDown}
+                    className="w-2 cursor-col-resize flex items-center justify-center group flex-shrink-0"
+                  >
+                    <div className="w-0.5 h-1/2 bg-gray-300 dark:bg-gray-700 group-hover:bg-blue-500 rounded-full transition-colors duration-200"></div>
+                  </div>
+                   {/* Right Pane: Preview */}
+                   <div className="flex flex-col space-y-2 flex-grow min-h-0">
+                      <div className="flex-grow h-full relative">
+                           {isLoading && (
+                              <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-100/50 dark:bg-gray-900/50 backdrop-blur-sm rounded-lg">
+                                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 bg-white/80 dark:bg-black/80 p-3 rounded-lg shadow-md">
+                                      <LoadingSpinner />
+                                      <span className="ml-2">{loadingMessage}</span>
+                                  </div>
+                              </div>
+                          )}
+                          <LivePreview code={generatedCode} />
+                      </div>
+                  </div>
+              </div>
+            )}
+        </main>
+        
+        <footer className="text-center py-2 border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-black">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+                &copy; {new Date().getFullYear()} John Wesley Quintero. All Rights Reserved. Powered by Google Gemini.
+            </p>
+        </footer>
 
         {toastMessage && <Toast message={toastMessage} onClose={() => setToastMessage(null)} />}
     </div>

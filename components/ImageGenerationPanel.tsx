@@ -1,19 +1,30 @@
 
 import React, { useState } from 'react';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
+import { AspectRatio } from '../types.ts';
 
 interface ImageGenerationPanelProps {
   prompt: string;
   onPromptChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onClearPrompt: () => void;
   onSubmit: () => void;
-  onClearImage: () => void; // New prop for clearing the generated image to start over
+  onClearImage: () => void;
   isLoading: boolean;
   isApiKeyConfigured: boolean;
-  imageData: string | null; // Base64 encoded image data
+  imageData: string | null;
+  aspectRatio: AspectRatio;
+  onAspectRatioChange: (ratio: AspectRatio) => void;
   error: string | null;
   setError: (error: string | null) => void;
 }
+
+const ASPECT_RATIOS: { label: string; value: AspectRatio }[] = [
+    { label: 'Square (1:1)', value: '1:1' },
+    { label: 'Landscape (16:9)', value: '16:9' },
+    { label: 'Portrait (9:16)', value: '9:16' },
+    { label: 'Widescreen (4:3)', value: '4:3' },
+    { label: 'Tall (3:4)', value: '3:4' },
+];
 
 export const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
   prompt,
@@ -24,6 +35,8 @@ export const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
   isLoading,
   isApiKeyConfigured,
   imageData,
+  aspectRatio,
+  onAspectRatioChange,
   error,
   setError,
 }) => {
@@ -85,6 +98,29 @@ export const ImageGenerationPanel: React.FC<ImageGenerationPanelProps> = ({
                     </button>
                 )}
             </div>
+
+            <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Aspect Ratio:
+                </label>
+                <div className="flex flex-wrap gap-2">
+                    {ASPECT_RATIOS.map(ratio => (
+                        <button
+                            key={ratio.value}
+                            onClick={() => onAspectRatioChange(ratio.value)}
+                            disabled={isLoading}
+                            className={`px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-full transition-colors duration-150 ease-in-out disabled:cursor-not-allowed ${
+                                aspectRatio === ratio.value 
+                                ? 'bg-purple-600 text-white shadow-md ring-2 ring-offset-2 ring-purple-500 dark:ring-offset-gray-800' 
+                                : 'bg-white hover:bg-gray-100 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 border border-gray-300 dark:border-gray-600'
+                            }`}
+                        >
+                            {ratio.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
             <button
                 onClick={handleSubmitClick}
                 disabled={isLoading || !isApiKeyConfigured || !prompt.trim()}

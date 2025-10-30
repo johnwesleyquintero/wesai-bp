@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { generateWebAppWithGeminiStream, editCodeWithGeminiStream } from '../services/geminiService.ts';
 import { CodeEditor } from './CodeEditor.tsx';
@@ -29,6 +30,15 @@ export const BuilderPanel: React.FC<BuilderPanelProps> = ({ isApiKeyConfigured, 
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [loadingMessage, setLoadingMessage] = useState<string>('');
+
+    // Resizable panel state
+    const [dividerPosition, setDividerPosition] = useState<number>(() => {
+        const savedPosition = localStorage.getItem('builderDividerPosition');
+        return savedPosition ? parseInt(savedPosition, 10) : window.innerWidth / 2;
+    });
+    const isDragging = useRef(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
 
     // Copilot State
     const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([]);
@@ -148,6 +158,41 @@ export const BuilderPanel: React.FC<BuilderPanelProps> = ({ isApiKeyConfigured, 
         });
     }, [generatedCode, showToast]);
 
+    // --- Resizable Panel Logic ---
+    const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        isDragging.current = true;
+        e.preventDefault();
+    };
+
+    const onMouseUp = useCallback(() => {
+        isDragging.current = false;
+        localStorage.setItem('builderDividerPosition', dividerPosition.toString());
+    }, [dividerPosition]);
+
+    const onMouseMove = useCallback((e: MouseEvent) => {
+        if (!isDragging.current || !containerRef.current) return;
+        
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const newWidth = e.clientX - containerRect.left;
+        const minWidth = 300; // Minimum width for each panel
+        const maxWidth = containerRect.width - minWidth;
+
+        if (newWidth > minWidth && newWidth < maxWidth) {
+            setDividerPosition(newWidth);
+        }
+    }, []);
+
+    useEffect(() => {
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+    }, [onMouseMove, onMouseUp]);
+
+
     return (
         <div className="flex flex-col flex-grow space-y-4 h-full">
             <div className="space-y-4">
@@ -199,9 +244,9 @@ export const BuilderPanel: React.FC<BuilderPanelProps> = ({ isApiKeyConfigured, 
             )}
             
             {generatedCode ? (
-              <div className="flex flex-col lg:flex-row flex-grow gap-6 min-h-0">
+              <div ref={containerRef} className="flex flex-row flex-grow min-h-0">
                   {/* Left Pane: Code + Copilot */}
-                  <div className="flex flex-col space-y-4 flex-1 min-h-0 lg:max-w-1/2">
+                  <div style={{ width: `${dividerPosition}px` }} className="flex flex-col space-y-4 min-h-0 pr-2">
                       <div className="flex flex-col flex-1 min-h-0">
                           <div className="flex justify-between items-center mb-2">
                               <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Code</h2>
@@ -236,8 +281,15 @@ export const BuilderPanel: React.FC<BuilderPanelProps> = ({ isApiKeyConfigured, 
                            </form>
                       </div>
                   </div>
+                   {/* Divider */}
+                  <div
+                    onMouseDown={onMouseDown}
+                    className="w-2 cursor-col-resize flex items-center justify-center group"
+                  >
+                    <div className="w-0.5 h-full bg-gray-200 dark:bg-gray-700 group-hover:bg-blue-500 transition-colors duration-200"></div>
+                  </div>
                    {/* Right Pane: Preview */}
-                   <div className="flex flex-col space-y-2 flex-1 min-h-0">
+                   <div className="flex flex-col space-y-2 flex-grow min-h-0 pl-2">
                       <div className="flex justify-between items-center">
                           <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Live Preview</h2>
                           {isLoading && (
@@ -253,7 +305,15 @@ export const BuilderPanel: React.FC<BuilderPanelProps> = ({ isApiKeyConfigured, 
                   </div>
               </div>
             ) : (
-                <BuilderEmptyState onTemplateClick={handleTemplateClick} templates={TEMPLATES} />
+                // FIX: Pass all required props to BuilderEmptyState and remove the invalid 'templates' prop.
+                <BuilderEmptyState 
+                    onTemplateClick={handleTemplateClick}
+                    prompt={prompt}
+                    setPrompt={setPrompt}
+                    handleGenerate={handleGenerate}
+                    isLoading={isLoading}
+                    isApiKeyConfigured={isApiKeyConfigured}
+                />
             )}
         </div>
     );

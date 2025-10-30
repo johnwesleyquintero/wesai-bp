@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,94 +6,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WesAI Builder Platform</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><polygon points=%2250,10 90,90 10,90%22 fill=%22purple%22/></svg>">
+  <link rel="preconnect" href="https://rsms.me/">
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
   <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
   <script>
     // For Tailwind dark mode based on class
-    // Check local storage for theme preference
     const theme = localStorage.getItem('theme');
     if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-
-    // API_KEY handling:
-    // Vite exposes environment variables prefixed with VITE_ to the client code via import.meta.env.
-    // For local development, create a .env file in the root of your project and add:
-    // VITE_GEMINI_API_KEY=YOUR_ACTUAL_GEMINI_API_KEY
-    // IMPORTANT: Do not commit your .env file or real API keys to version control.
-    // The application will prioritize keys saved in LocalStorage via the UI.
   </script>
   <style>
+    :root { font-family: 'Inter', sans-serif; }
+    @supports (font-variation-settings: normal) {
+      :root { font-family: 'Inter var', sans-serif; }
+    }
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-
-    /* Custom dark mode overrides for prose in model chat bubbles */
-    .dark .prose-invert code {
-      background-color: #1e293b; /* slate-800 */
-      color: #e2e8f0; /* slate-200 */
-    }
-    .dark .prose-invert pre {
-      background-color: #1e293b; /* slate-800 */
-      color: #e2e8f0; /* slate-200 */
-    }
-
-    /* Styles for Tailwind Typography within user chat bubble (blue background) */
-    .prose-invert-user-bubble {
-      --tw-prose-body: #e0f2fe;
-      --tw-prose-headings: #ffffff;
-      --tw-prose-lead: #bae6fd;
-      --tw-prose-links: #ffffff;
-      --tw-prose-bold: #ffffff;
-      --tw-prose-counters: #bae6fd;
-      --tw-prose-bullets: #bae6fd;
-      --tw-prose-hr: #38bdf8;
-      --tw-prose-quotes: #f0f9ff;
-      --tw-prose-quote-borders: #7dd3fc;
-      --tw-prose-captions: #bae6fd;
-      --tw-prose-code: #ffffff;
-      --tw-prose-pre-code: #e0f2fe;
-      --tw-prose-pre-bg: rgba(30, 64, 175, 0.3);
-      --tw-prose-invert-body: #e0f2fe;
-      --tw-prose-invert-headings: #ffffff;
-      --tw-prose-invert-lead: #bae6fd;
-      --tw-prose-invert-links: #ffffff;
-      --tw-prose-invert-bold: #ffffff;
-      --tw-prose-invert-counters: #bae6fd;
-      --tw-prose-invert-bullets: #bae6fd;
-      --tw-prose-invert-hr: #38bdf8;
-      --tw-prose-invert-quotes: #f0f9ff;
-      --tw-prose-invert-quote-borders: #7dd3fc;
-      --tw-prose-invert-captions: #bae6fd;
-      --tw-prose-invert-code: #ffffff;
-      --tw-prose-invert-pre-code: #e0f2fe;
-      --tw-prose-invert-pre-bg: rgba(30, 64, 175, 0.3);
-      --tw-prose-invert-th-borders: #7dd3fc;
-      --tw-prose-invert-td-borders: #38bdf8;
-    }
-    .prose-invert-user-bubble code::before, .prose-invert-user-bubble code::after {
-        content: ""; /* Remove backticks from inline code */
-    }
-
-    /* Ensure custom PreWithCopyButton code text is themed correctly */
-    .dark .prose-pre code {
-       color: inherit; /* Inherit from pre */
-    }
-
-    /* Animation for Toast component */
-    @keyframes fade-in-out {
-      0% { opacity: 0; transform: translateY(-20px); }
-      10% { opacity: 1; transform: translateY(0); }
-      90% { opacity: 1; transform: translateY(0); }
-      100% { opacity: 0; transform: translateY(-20px); }
-    }
-    .animate-fade-in-out {
-      animation: fade-in-out 3s ease-in-out forwards;
-    }
-
   </style>
-  <!-- Babel for ReactPreviewRenderer -->
+  <!-- Babel for Live Preview in iframe -->
   <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
   
 <script type="importmap">
@@ -119,7 +55,7 @@
 }
 </script>
 </head>
-<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+<body class="bg-gray-50 dark:bg-black transition-colors duration-200">
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

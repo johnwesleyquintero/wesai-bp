@@ -1,9 +1,8 @@
+
 import { GoogleGenAI, GenerateContentResponse, Chat } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;
 const MODEL_NAME_PRO = 'gemini-2.5-pro';
-const MODEL_NAME_FLASH = 'gemini-2.5-flash';
-const MODEL_NAME_IMAGEN = 'imagen-4.0-generate-001';
 
 export const initializeGeminiClient = (apiKey: string): void => {
   try {
@@ -53,7 +52,7 @@ Follow these rules STRICTLY:
 4.  **Self-Contained**: The component must be completely self-contained. It should not rely on any external files or local assets. All logic, styling, and structure must be within this single component.
 5.  **Dependencies**:
     - Use React and TypeScript.
-    - Use Tailwind CSS for all styling. Do not use custom CSS, inline style objects, or CSS-in-JS libraries unless absolutely necessary for dynamic styles.
+    - Use Tailwind CSS for all styling. Do not use custom CSS, inline style objects, or CSS-in-JS libraries unless absolutely necessary for dynamic styles that cannot be achieved with Tailwind.
     - Do NOT import any external libraries or packages other than 'react'. If icons are needed, use inline SVG elements.
 6.  **Code Quality**:
     - The code must be clean, readable, and well-commented where necessary.
@@ -108,100 +107,4 @@ export const editCodeWithGeminiStream = async (currentCode: string, editPrompt: 
     }
     throw new Error("An unknown error occurred during code editing stream.");
   }
-};
-
-
-// --- Chat Panel Services ---
-
-export const initializeChat = (): Chat => {
-  const currentAi = getAiInstance();
-  return currentAi.chats.create({
-    model: MODEL_NAME_FLASH,
-    config: {
-      systemInstruction: 'You are WesAI, an expert AI assistant for software development. Help users with their questions about coding, design, and creating web applications with React and TypeScript.',
-    },
-  });
-};
-
-export const sendChatMessageStream = async (chat: Chat, message: string): Promise<AsyncIterable<GenerateContentResponse>> => {
-    try {
-        const stream = await chat.sendMessageStream({ message });
-        return stream;
-    } catch (error) {
-        console.error("Error sending chat message:", error);
-        if (error instanceof Error) {
-            throw new Error(`Chat API request failed: ${error.message}`);
-        }
-        throw new Error("An unknown error occurred during chat.");
-    }
-};
-
-// --- Code Tools Services ---
-
-export const performCodeToolActionStream = async (code: string, tool: 'review' | 'refactor' | 'preview' | 'generate' | 'content'): Promise<AsyncIterable<GenerateContentResponse>> => {
-    const currentAi = getAiInstance();
-    let systemInstruction = '';
-    let userPrompt = code;
-
-    switch (tool) {
-        case 'review':
-            systemInstruction = 'You are an expert code reviewer. Analyze the following code for bugs, performance issues, style inconsistencies, and adherence to best practices. Provide a detailed, constructive review in Markdown format.';
-            userPrompt = `Please review the following code:\n\`\`\`tsx\n${code}\n\`\`\``;
-            break;
-        case 'refactor':
-            systemInstruction = 'You are an expert at refactoring code. Improve the given code for readability, performance, and maintainability. Respond with a "## Refactoring Summary:" section explaining the changes, followed by a "## Refactored Code:" section with the complete, updated code in a Markdown code block.';
-            userPrompt = `Please refactor the following code:\n\`\`\`tsx\n${code}\n\`\`\``;
-            break;
-        case 'preview':
-            systemInstruction = 'You are an AI that describes React components. Analyze the provided component and describe its functionality, props, and expected behavior in clear, concise language (Markdown format).';
-            userPrompt = `Describe this React component:\n\`\`\`tsx\n${code}\n\`\`\``;
-            break;
-        case 'generate':
-            systemInstruction = 'You are an expert code generator. Create a high-quality code snippet based on the user\'s description. Return only the code in a Markdown code block.';
-            break;
-        case 'content':
-             systemInstruction = 'You are a helpful content writing assistant. Generate text content based on the user\'s prompt. Format the response in Markdown.';
-             break;
-    }
-
-    try {
-        const stream = await currentAi.models.generateContentStream({
-            model: MODEL_NAME_FLASH,
-            contents: userPrompt,
-            config: {
-                systemInstruction: systemInstruction
-            }
-        });
-        return stream;
-    } catch (error) {
-        console.error(`Error in performCodeToolActionStream for tool "${tool}":`, error);
-        if (error instanceof Error) {
-            throw new Error(`API request for code ${tool} failed: ${error.message}`);
-        }
-        throw new Error(`An unknown error occurred during code ${tool}.`);
-    }
-};
-
-// --- Image Generation Services ---
-
-export const generateImageWithImagen = async (prompt: string) => {
-    const currentAi = getAiInstance();
-    try {
-        const response = await currentAi.models.generateImages({
-            model: MODEL_NAME_IMAGEN,
-            prompt: prompt,
-            config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/jpeg',
-                aspectRatio: '1:1',
-            },
-        });
-        return response;
-    } catch (error) {
-        console.error("Error in generateImageWithImagen:", error);
-        if (error instanceof Error) {
-            throw new Error(`Image generation failed: ${error.message}`);
-        }
-        throw new Error("An unknown error occurred during image generation.");
-    }
 };
