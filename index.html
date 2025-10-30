@@ -54,8 +54,6 @@
       --tw-prose-code: #ffffff;
       --tw-prose-pre-code: #e0f2fe;
       --tw-prose-pre-bg: rgba(30, 64, 175, 0.3);
-      --tw-prose-th-borders: #7dd3fc;
-      --tw-prose-td-borders: #38bdf8;
       --tw-prose-invert-body: #e0f2fe;
       --tw-prose-invert-headings: #ffffff;
       --tw-prose-invert-lead: #bae6fd;
@@ -81,6 +79,18 @@
     .dark .prose-pre code {
        color: inherit; /* Inherit from pre */
     }
+
+    /* Animation for Toast component */
+    @keyframes fade-in-out {
+      0% { opacity: 0; transform: translateY(-20px); }
+      10% { opacity: 1; transform: translateY(0); }
+      90% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-20px); }
+    }
+    .animate-fade-in-out {
+      animation: fade-in-out 3s ease-in-out forwards;
+    }
+
   </style>
   <!-- Babel for ReactPreviewRenderer -->
   <script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
