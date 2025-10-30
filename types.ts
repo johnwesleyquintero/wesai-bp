@@ -1,8 +1,11 @@
 export type ApiKeySource = 'ui' | 'env' | 'none';
 export type Theme = 'light' | 'dark';
 
-// Add 'builder' to the ActiveTab type
-export type ActiveTab = 'builder' | 'review' | 'refactor' | 'preview' | 'generate' | 'content' | 'image' | 'chat' | 'documentation';
+// New type for the sub-navigation in the Code Tools panel
+export type CodeTool = 'review' | 'refactor' | 'preview' | 'generate' | 'content';
+
+// Updated ActiveTab type with 'codeTools'
+export type ActiveTab = 'builder' | 'chat' | 'codeTools' | 'image' | 'documentation';
 
 // Fix: Add and export the ChatMessage interface, which was missing.
 export interface ChatMessage {

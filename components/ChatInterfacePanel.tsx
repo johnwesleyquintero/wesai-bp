@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -63,7 +62,7 @@ export const ChatInterfacePanel: React.FC<ChatInterfacePanelProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-[60vh] bg-gray-50 dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+    <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
        {error && (
         <div className="p-3 border-b border-red-300 dark:border-red-600 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-sm">
           <strong>Chat Error:</strong> {error}

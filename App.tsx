@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { GoogleGenAI, GenerateContentResponse, Chat } from "@google/genai";
+import { Chat } from "@google/genai";
 import { Header } from './components/Header.tsx';
 import { 
   initializeGeminiClient, 
@@ -14,9 +14,11 @@ import {
   sendMessageToChatStream,
 } from './services/geminiService.ts';
 
-// Import Components
-import { ApiKeySection } from './components/ApiKeySection.tsx';
-import { TabNavigation } from './components/TabNavigation.tsx';
+// Import NEW/MODIFIED Components
+import { Sidebar } from './components/Sidebar.tsx';
+import { SettingsModal } from './components/SettingsModal.tsx';
+
+// Import Panel Components
 import { BuilderPanel } from './components/BuilderPanel.tsx';
 import { CodeInteractionPanel } from './components/CodeInteractionPanel.tsx';
 import { ImageGenerationPanel } from './components/ImageGenerationPanel.tsx';
@@ -24,8 +26,7 @@ import { ChatInterfacePanel } from './components/ChatInterfacePanel.tsx';
 import { DocumentationViewerPanel } from './components/DocumentationViewerPanel.tsx';
 
 // Import shared types
-import { ApiKeySource, Theme, ActiveTab, ChatMessage } from './types.ts';
-
+import { ApiKeySource, Theme, ActiveTab, ChatMessage, CodeTool } from './types.ts';
 
 const App: React.FC = () => {
   // --- Global State ---
@@ -38,20 +39,21 @@ const App: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
 
   // --- Tab Navigation State ---
   const [activeTab, setActiveTab] = useState<ActiveTab>('builder');
 
   // --- Tool-Specific State ---
-  // Code Interaction Panel State (Review, Refactor, Preview, Generate, Content)
+  const [activeCodeTool, setActiveCodeTool] = useState<CodeTool>('review');
   const [interactionCode, setInteractionCode] = useState('');
   const [interactionFeedback, setInteractionFeedback] = useState('');
 
-  // Image Generation Panel State
   const [imagePrompt, setImagePrompt] = useState('');
   const [imageData, setImageData] = useState<string | null>(null);
 
-  // Chat Panel State
   const [chatSession, setChatSession] = useState<Chat | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -85,6 +87,7 @@ const App: React.FC = () => {
       clearGeminiClient();
       setActiveApiKey(null);
       setApiKeySource('none');
+      setIsSettingsModalOpen(true); // Open settings if no key is found
     }
   }, []); 
 
@@ -92,7 +95,6 @@ const App: React.FC = () => {
     initializeActiveApiKey();
   }, [initializeActiveApiKey]);
   
-  // Effect to initialize or reset chat session when API key changes
   useEffect(() => {
     const initChat = async () => {
       if (activeApiKey && activeTab === 'chat') {
@@ -127,19 +129,23 @@ const App: React.FC = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   }, []);
 
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarCollapsed(prev => !prev);
+  }, []);
+
   const handleSaveApiKey = useCallback((key: string) => {
     if (key.trim()) {
       localStorage.setItem('geminiApiKey', key);
       setActiveApiKey(key);
       initializeGeminiClient(key);
       setApiKeySource('ui');
-      setError(null); 
+      setError(null);
+      setIsSettingsModalOpen(false); // Close modal on save
     }
   }, []);
 
   const handleRemoveApiKey = useCallback(() => {
     localStorage.removeItem('geminiApiKey');
-    // Clear all tool-specific content
     setInteractionCode('');
     setInteractionFeedback('');
     setImagePrompt('');
@@ -151,7 +157,8 @@ const App: React.FC = () => {
   }, [initializeActiveApiKey]);
   
   const handleTabChange = (tab: ActiveTab) => {
-    setError(null); // Clear errors when switching tabs
+    setError(null);
+    setInteractionFeedback('');
     setActiveTab(tab);
   };
 
@@ -164,9 +171,9 @@ const App: React.FC = () => {
     setInteractionFeedback('');
     try {
       let result = '';
-      if (activeTab === 'review') {
+      if (activeCodeTool === 'review') {
         result = await reviewCodeWithGemini(interactionCode);
-      } else if (activeTab === 'refactor') {
+      } else if (activeCodeTool === 'refactor') {
           const stream = refactorCodeWithGeminiStream(interactionCode);
           let fullResponse = '';
           for await (const chunk of stream) {
@@ -178,21 +185,21 @@ const App: React.FC = () => {
               }
           }
           result = fullResponse; // Final assignment
-      } else if (activeTab === 'preview') {
+      } else if (activeCodeTool === 'preview') {
         result = await getReactComponentPreview(interactionCode);
-      } else if (activeTab === 'generate') {
+      } else if (activeCodeTool === 'generate') {
         result = await generateCodeWithGemini(interactionCode);
-      } else if (activeTab === 'content') {
+      } else if (activeCodeTool === 'content') {
         result = await generateContentWithGemini(interactionCode);
       }
       setInteractionFeedback(result);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "An unknown error occurred";
-      setError(`Error during ${activeTab} operation: ${errorMessage}`);
+      setError(`Error during ${activeCodeTool} operation: ${errorMessage}`);
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab, interactionCode]);
+  }, [activeCodeTool, interactionCode]);
 
   // --- Image Generation Panel Handler ---
   const handleImageGenerationSubmit = useCallback(async () => {
@@ -276,76 +283,89 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center p-4 pt-0 sm:p-6 bg-gray-100 dark:bg-gray-800">
-      <div className="w-full max-w-7xl flex flex-col h-screen">
-        <Header title="WesAI Builder Platform" theme={theme} toggleTheme={toggleTheme} />
+    <div className="h-screen w-screen flex flex-col bg-gray-100 dark:bg-gray-900 overflow-hidden">
+        <Header title="WesAI Builder Platform" />
         
-        <ApiKeySection 
+        <div className="flex flex-1 min-h-0">
+            <Sidebar 
+                activeTab={activeTab} 
+                onTabChange={handleTabChange} 
+                onOpenSettings={() => setIsSettingsModalOpen(true)}
+                theme={theme}
+                toggleTheme={toggleTheme}
+                isCollapsed={isSidebarCollapsed}
+                onToggle={toggleSidebar}
+            />
+
+            <div className="flex-1 flex flex-col overflow-hidden">
+                <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+                    {activeTab === 'builder' && (
+                        <BuilderPanel isApiKeyConfigured={isApiKeyConfigured} theme={theme}/>
+                    )}
+                    {activeTab === 'codeTools' && (
+                        <CodeInteractionPanel
+                            activeTool={activeCodeTool}
+                            onToolChange={setActiveCodeTool}
+                            code={interactionCode}
+                            onCodeChange={(e) => setInteractionCode(e.target.value)}
+                            onClearInput={() => setInteractionCode('')}
+                            onSubmit={handleCodeInteractionSubmit}
+                            isLoading={isLoading}
+                            isApiKeyConfigured={isApiKeyConfigured}
+                            feedback={interactionFeedback}
+                            onClearFeedback={() => setInteractionFeedback('')}
+                            error={error}
+                            setError={setError}
+                        />
+                    )}
+                    {activeTab === 'image' && (
+                        <ImageGenerationPanel
+                            prompt={imagePrompt}
+                            onPromptChange={(e) => setImagePrompt(e.target.value)}
+                            onClearPrompt={() => setImagePrompt('')}
+                            onSubmit={handleImageGenerationSubmit}
+                            onClearImage={() => { setImageData(null); setImagePrompt(''); setError(null); }}
+                            isLoading={isLoading}
+                            isApiKeyConfigured={isApiKeyConfigured}
+                            imageData={imageData}
+                            error={error}
+                            setError={setError}
+                        />
+                    )}
+                    {activeTab === 'chat' && (
+                        <ChatInterfacePanel
+                            chatMessages={chatMessages}
+                            chatInput={chatInput}
+                            onChatInputChange={setChatInput}
+                            onClearChatInput={() => setChatInput('')}
+                            onChatSubmit={handleChatSubmit}
+                            isLoading={isLoading}
+                            isApiKeyConfigured={isApiKeyConfigured}
+                            isChatSessionActive={isChatSessionActive}
+                            onCopyChatMessage={handleCopyChatMessage}
+                            onTogglePreview={handleTogglePreview}
+                            copiedMessageId={copiedMessageId}
+                            error={error}
+                        />
+                    )}
+                    {activeTab === 'documentation' && <DocumentationViewerPanel />}
+                </main>
+                <footer className="text-center py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                        WesAI Builder Platform - Powered by Google Gemini.
+                    </p>
+                </footer>
+            </div>
+        </div>
+
+        <SettingsModal
+            isOpen={isSettingsModalOpen}
+            onClose={() => setIsSettingsModalOpen(false)}
             onSaveKey={handleSaveApiKey}
             onRemoveKey={handleRemoveApiKey}
             isKeySet={isApiKeyConfigured}
             currentKeySource={apiKeySource}
         />
-
-        <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-
-        <main className="flex-grow flex flex-col overflow-y-auto space-y-6">
-          {activeTab === 'builder' && (
-            <BuilderPanel isApiKeyConfigured={isApiKeyConfigured} theme={theme}/>
-          )}
-          {(activeTab === 'review' || activeTab === 'refactor' || activeTab === 'preview' || activeTab === 'generate' || activeTab === 'content') && (
-              <CodeInteractionPanel 
-                activeTab={activeTab}
-                code={interactionCode}
-                onCodeChange={(e) => setInteractionCode(e.target.value)}
-                onClearInput={() => setInteractionCode('')}
-                onSubmit={handleCodeInteractionSubmit}
-                isLoading={isLoading}
-                isApiKeyConfigured={isApiKeyConfigured}
-                feedback={interactionFeedback}
-                error={error}
-                setError={setError}
-              />
-          )}
-          {activeTab === 'image' && (
-            <ImageGenerationPanel
-              prompt={imagePrompt}
-              onPromptChange={(e) => setImagePrompt(e.target.value)}
-              onClearPrompt={() => setImagePrompt('')}
-              onSubmit={handleImageGenerationSubmit}
-              onClearImage={() => { setImageData(null); setImagePrompt(''); setError(null); }}
-              isLoading={isLoading}
-              isApiKeyConfigured={isApiKeyConfigured}
-              imageData={imageData}
-              error={error}
-              setError={setError}
-            />
-          )}
-          {activeTab === 'chat' && (
-             <ChatInterfacePanel
-                chatMessages={chatMessages}
-                chatInput={chatInput}
-                onChatInputChange={setChatInput}
-                onClearChatInput={() => setChatInput('')}
-                onChatSubmit={handleChatSubmit}
-                isLoading={isLoading}
-                isApiKeyConfigured={isApiKeyConfigured}
-                isChatSessionActive={isChatSessionActive}
-                onCopyChatMessage={handleCopyChatMessage}
-                onTogglePreview={handleTogglePreview}
-                copiedMessageId={copiedMessageId}
-                error={error}
-              />
-          )}
-          {activeTab === 'documentation' && <DocumentationViewerPanel />}
-        </main>
-        
-        <footer className="text-center mt-auto py-6 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              WesAI Builder Platform - From Prompt to Live App. Powered by Google Gemini.
-            </p>
-        </footer>
-      </div>
     </div>
   );
 };
