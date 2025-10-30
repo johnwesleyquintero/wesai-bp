@@ -1,17 +1,23 @@
 export type ApiKeySource = 'ui' | 'env' | 'none';
 export type Theme = 'light' | 'dark';
 
-// New type for the sub-navigation in the Code Tools panel
+// FIX: Expand ActiveTab to include new tab types used in TabNavigation.tsx.
+export type ActiveTab = 'builder' | 'documentation' | 'chat' | 'codeTools' | 'image';
+
+export interface CopilotMessage {
+  id: string;
+  role: 'user' | 'model';
+  content: string;
+}
+
+// FIX: Add missing CodeTool type definition for CodeInteractionPanel.tsx.
 export type CodeTool = 'review' | 'refactor' | 'preview' | 'generate' | 'content';
 
-// Updated ActiveTab type with 'codeTools'
-export type ActiveTab = 'builder' | 'chat' | 'codeTools' | 'image' | 'documentation';
-
-// Fix: Add and export the ChatMessage interface, which was missing.
+// FIX: Add missing ChatMessage interface definition for ChatInterfacePanel.tsx.
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   content: string;
-  componentCode?: string | null;
+  componentCode?: string;
   showPreview?: boolean;
 }

@@ -1,9 +1,12 @@
-import React, { useState, useCallback } from 'react';
-import { generateWebAppWithGeminiStream } from '../services/geminiService.ts';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { generateWebAppWithGeminiStream, editCodeWithGeminiStream } from '../services/geminiService.ts';
 import { CodeEditor } from './CodeEditor.tsx';
 import { LivePreview } from './LivePreview.tsx';
 import { LoadingSpinner } from './LoadingSpinner.tsx';
-import { Theme } from '../types.ts';
+import { Theme, CopilotMessage } from '../types.ts';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+
 
 interface BuilderPanelProps {
     isApiKeyConfigured: boolean;
@@ -23,6 +26,16 @@ export const BuilderPanel: React.FC<BuilderPanelProps> = ({ isApiKeyConfigured, 
     const [generatedCode, setGeneratedCode] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+    const [loadingMessage, setLoadingMessage] = useState<string>('');
+
+    // Copilot State
+    const [copilotMessages, setCopilotMessages] = useState<CopilotMessage[]>([]);
+    const [copilotInput, setCopilotInput] = useState<string>('');
+    const copilotMessagesEndRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        copilotMessagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [copilotMessages]);
 
     const handleGenerate = useCallback(async (promptToBuild: string) => {
         if (!promptToBuild.trim()) {
@@ -35,8 +48,10 @@ export const BuilderPanel: React.FC<BuilderPanelProps> = ({ isApiKeyConfigured, 
         }
 
         setIsLoading(true);
+        setLoadingMessage('Building initial component...');
         setError(null);
         setGeneratedCode('');
+        setCopilotMessages([]); // Reset copilot chat on new generation
 
         try {
             const stream = await generateWebAppWithGeminiStream(promptToBuild);
@@ -56,6 +71,52 @@ export const BuilderPanel: React.FC<BuilderPanelProps> = ({ isApiKeyConfigured, 
             setIsLoading(false);
         }
     }, [isApiKeyConfigured]);
+
+    const handleCopilotSubmit = useCallback(async () => {
+        if (!copilotInput.trim() || !generatedCode) return;
+        
+        const userMessage: CopilotMessage = { id: `user-${Date.now()}`, role: 'user', content: copilotInput };
+        setCopilotMessages(prev => [...prev, userMessage]);
+        const currentInput = copilotInput;
+        setCopilotInput('');
+        
+        setIsLoading(true);
+        setLoadingMessage('Copilot is editing the code...');
+        setError(null);
+        
+        const modelMessageId = `model-${Date.now()}`;
+        setCopilotMessages(prev => [...prev, { id: modelMessageId, role: 'model', content: '...' }]);
+
+        try {
+            const stream = await editCodeWithGeminiStream(generatedCode, currentInput);
+            let fullCode = '';
+            let firstChunk = true;
+            for await (const chunk of stream) {
+                const chunkText = chunk.text;
+                if (chunkText) {
+                    if (firstChunk) {
+                        // The model might start with a newline, trim it for the first chunk.
+                        fullCode += chunkText.trimStart();
+                        firstChunk = false;
+                    } else {
+                        fullCode += chunkText;
+                    }
+                    setGeneratedCode(fullCode);
+                }
+            }
+            setCopilotMessages(prev => prev.map(msg => 
+                msg.id === modelMessageId ? { ...msg, content: `I have updated the code based on your request: "${currentInput}"` } : msg
+            ));
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : "An unknown error occurred during chat.";
+            setError(errorMessage);
+            setCopilotMessages(prev => prev.map(msg => 
+                msg.id === modelMessageId ? { ...msg, content: `**Error:** ${errorMessage}` } : msg
+            ));
+        } finally {
+            setIsLoading(false);
+        }
+    }, [copilotInput, generatedCode, isApiKeyConfigured]);
     
     const handleTemplateClick = (templatePrompt: string) => {
         setPrompt(templatePrompt);
@@ -77,92 +138,104 @@ export const BuilderPanel: React.FC<BuilderPanelProps> = ({ isApiKeyConfigured, 
 
     const handleCopy = useCallback(() => {
         if (!generatedCode) return;
-        navigator.clipboard.writeText(generatedCode).then(() => {
-            // Optional: show a temporary "Copied!" message
-        }).catch(err => {
+        navigator.clipboard.writeText(generatedCode).catch(err => {
             console.error('Failed to copy code: ', err);
             setError("Failed to copy code to clipboard.");
         });
     }, [generatedCode]);
 
     return (
-        <div className="flex flex-col flex-grow space-y-6 h-full">
+        <div className="flex flex-col flex-grow space-y-4 h-full">
             <div className="space-y-4">
-                <div>
-                    <label htmlFor="promptInput" className="block text-lg font-medium text-gray-800 dark:text-gray-200 mb-2">
-                        Describe the application you want to build:
-                    </label>
-                    <textarea
-                        id="promptInput"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        disabled={isLoading}
-                        rows={3}
-                        className="w-full p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 text-base transition-colors duration-150 ease-in-out disabled:opacity-70 disabled:cursor-not-allowed"
-                        placeholder="e.g., 'A responsive product landing page for a smart watch with a hero section, features grid, and a contact form.'"
-                    />
-                </div>
-                 <div className="space-y-2">
-                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                        Or start with a template:
-                    </p>
+                <textarea
+                    id="promptInput"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    disabled={isLoading}
+                    rows={2}
+                    className="w-full p-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-base"
+                    placeholder="Describe the application you want to build..."
+                />
+                 <div className="flex flex-col sm:flex-row gap-4 items-center">
                     <div className="flex flex-wrap gap-2">
+                        <span className="text-sm font-medium text-gray-600 dark:text-gray-400 self-center">Templates:</span>
                         {TEMPLATES.map((template) => (
                             <button
                                 key={template.name}
                                 onClick={() => handleTemplateClick(template.prompt)}
                                 disabled={isLoading}
-                                className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium rounded-md disabled:opacity-50 transition-colors"
                             >
                                 {template.name}
                             </button>
                         ))}
                     </div>
+                     <button
+                        onClick={() => handleGenerate(prompt)}
+                        disabled={isLoading || !isApiKeyConfigured || !prompt.trim()}
+                        className="w-full sm:w-auto flex-grow sm:flex-grow-0 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md transition duration-150 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                        {isLoading && loadingMessage.startsWith('Building') && <LoadingSpinner />}
+                        {isLoading && loadingMessage.startsWith('Building') ? 'Building...' : 'Build It'}
+                        {!isLoading && 'Build It'}
+                    </button>
                 </div>
             </div>
 
-            <button
-                onClick={() => handleGenerate(prompt)}
-                disabled={isLoading || !isApiKeyConfigured || !prompt.trim()}
-                className="w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-150 ease-in-out disabled:opacity-60 disabled:cursor-not-allowed text-lg"
-            >
-                {isLoading && <LoadingSpinner />}
-                {isLoading ? 'Building...' : 'Build It'}
-            </button>
-
             {error && (
-                <div className="p-4 bg-red-100 dark:bg-red-700/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-200 rounded-md shadow" role="alert">
+                <div className="p-3 bg-red-100 dark:bg-red-700/30 border border-red-400 text-red-700 dark:text-red-200 rounded-md text-sm" role="alert">
                     <strong className="font-semibold">Error:</strong> {error}
                 </div>
             )}
             
             <div className="flex flex-col lg:flex-row flex-grow gap-6 min-h-0">
-                <div className="flex flex-col space-y-2 flex-1 min-h-0">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Code</h2>
-                        <div>
-                             <button onClick={handleCopy} disabled={!generatedCode} className="text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium py-1 px-3 rounded-md disabled:opacity-50 transition-colors">Copy</button>
-                             <button onClick={handleDownload} disabled={!generatedCode} className="ml-2 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium py-1 px-3 rounded-md disabled:opacity-50 transition-colors">Download .tsx</button>
+                {/* Left Pane: Code + Copilot */}
+                <div className="flex flex-col space-y-4 flex-1 min-h-0 lg:max-w-1/2">
+                    <div className="flex flex-col flex-1 min-h-0">
+                        <div className="flex justify-between items-center mb-2">
+                            <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Code</h2>
+                            <div>
+                                <button onClick={handleCopy} disabled={!generatedCode || isLoading} className="text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium py-1 px-3 rounded-md disabled:opacity-50">Copy</button>
+                                <button onClick={handleDownload} disabled={!generatedCode || isLoading} className="ml-2 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 font-medium py-1 px-3 rounded-md disabled:opacity-50">Download .tsx</button>
+                            </div>
+                        </div>
+                        <div className="flex-grow h-full border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+                           <CodeEditor code={generatedCode} onCodeChange={setGeneratedCode} theme={theme} />
                         </div>
                     </div>
-                    <div className="flex-grow h-full border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
-                        {!generatedCode && !isLoading ? (
-                            <div className="w-full h-full flex items-center justify-center bg-gray-50 dark:bg-gray-800/50">
-                                <div className="text-center text-gray-500 dark:text-gray-400">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="http://www.w3.org/2000/svg" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 mx-auto mb-2">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" />
-                                    </svg>
-                                    <p className="font-semibold">Code Editor</p>
-                                    <p className="text-sm">Generated code will appear here.</p>
-                                </div>
+                    <div className="flex flex-col flex-1 min-h-0 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm bg-white dark:bg-gray-800">
+                         <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 p-3 border-b border-gray-200 dark:border-gray-700">WesAI Copilot</h2>
+                         <div className="flex-grow p-4 space-y-4 overflow-y-auto">
+                            {copilotMessages.map((msg) => (
+                               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                 <div className={`max-w-lg p-3 rounded-xl shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100'}`}>
+                                     <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content || ''}</ReactMarkdown></div>
+                                 </div>
+                               </div>
+                            ))}
+                             <div ref={copilotMessagesEndRef} />
+                         </div>
+                         <form onSubmit={(e) => { e.preventDefault(); handleCopilotSubmit(); }} className="p-3 border-t border-gray-200 dark:border-gray-700">
+                            <div className="flex items-center space-x-2">
+                                <input type="text" value={copilotInput} onChange={(e) => setCopilotInput(e.target.value)} placeholder={generatedCode ? "e.g., 'Change the button color to red'" : "Generate a component first to enable the copilot"} disabled={isLoading || !generatedCode} className="w-full p-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm" />
+                                <button type="submit" disabled={isLoading || !copilotInput.trim()} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md disabled:opacity-60 flex items-center">
+                                    {isLoading && loadingMessage.startsWith('Copilot') ? <LoadingSpinner /> : <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" /></svg>}
+                                </button>
                             </div>
-                        ) : (
-                           <CodeEditor code={generatedCode} onCodeChange={setGeneratedCode} theme={theme} />
-                        )}
+                         </form>
                     </div>
                 </div>
+                 {/* Right Pane: Preview */}
                  <div className="flex flex-col space-y-2 flex-1 min-h-0">
-                    <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Live Preview</h2>
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Live Preview</h2>
+                        {isLoading && (
+                            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                                <LoadingSpinner />
+                                <span className="ml-2">{loadingMessage}</span>
+                            </div>
+                        )}
+                    </div>
                     <div className="flex-grow h-full border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
                         <LivePreview code={generatedCode} />
                     </div>
